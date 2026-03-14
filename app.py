@@ -2,7 +2,7 @@ import gradio as gr
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-MODEL_NAME = "YOUR_USERNAME/sms-transaction-extractor"
+MODEL_NAME = "srisaidivyakola/transaction_model"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
