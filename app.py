@@ -1,74 +1,79 @@
+import joblib
 import gradio as gr
-import pandas as pd
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import json
+import re
 
-# --------------------
-# Load model
-# --------------------
-MODEL_NAME = "srisaidivyakola/transaction_model"
+# ------------------------
+# Load models
+# ------------------------
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+type_model = joblib.load("type_model.joblib")
+target_model = joblib.load("target_model.joblib")
+alias_model = joblib.load("alias_model.joblib")
+account_model = joblib.load("account_model.joblib")
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model.to(device)
 
-print("Model loaded successfully")
+# ------------------------
+# Clean text
+# ------------------------
 
-# --------------------
-# Load dataset & stats
-# --------------------
-df = pd.read_csv("Lables.csv")
+def clean_text(text):
 
-total_records = len(df)
-debit_count = (df["Type"] == "Debit").sum()
-credit_count = (df["Type"] == "Credit").sum()
+    text = text.lower()
 
-stats_text = (
-    f"{{total records: {total_records} "
-    f"Debit: {debit_count} "
-    f"Credit: {credit_count}}}"
-)
+    text = re.sub(r'\d+', ' number ', text)
+    text = re.sub(r'[₹$]', ' currency ', text)
+    text = re.sub(r'[^a-z\s]', ' ', text)
 
-print(stats_text)
+    text = re.sub(r'\s+', ' ', text).strip()
 
-# --------------------
-# Prediction function
-# --------------------
+    return text
+
+
+# ------------------------
+# Extract amount
+# ------------------------
+
+def extract_amount(message):
+
+    match = re.search(r'(?:rs\.?|₹)\s?([\d,]+(?:\.\d+)?)', message.lower())
+
+    if match:
+        return float(match.group(1).replace(",", ""))
+
+    return None
+
+
+# ------------------------
+# Prediction
+# ------------------------
+
 def predict(sender, message):
 
-    text = f"extract transaction details: Sender: {sender} Message: {message}"
+    text = clean_text(sender + " " + message)
 
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=256)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    result = {
+        "Type": type_model.predict([text])[0],
+        "Amount": extract_amount(message),
+        "Target": target_model.predict([text])[0],
+        "Alias": alias_model.predict([text])[0],
+        "Account": account_model.predict([text])[0]
+    }
 
-    outputs = model.generate(**inputs, max_length=128)
+    return result
 
-    result = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    try:
-        parsed = json.loads(result)
-        return parsed
-    except:
-        return {"error": result}
+# ------------------------
+# Gradio interface
+# ------------------------
 
-# --------------------
-# Gradio UI
-# --------------------
 demo = gr.Interface(
     fn=predict,
     inputs=[
-        gr.Textbox(label="Sender", placeholder="AX-ICICIT-S"),
+        gr.Textbox(label="Sender"),
         gr.Textbox(label="Message Content", lines=4)
     ],
     outputs="json",
-    title="SMS Transaction Extractor",
-    description=(
-        "Extracts transaction details from SMS\n\n"
-        f"📊 Dataset Stats:\n{stats_text}"
-    )
+    title="SMS Transaction Extractor"
 )
 
 demo.launch()
