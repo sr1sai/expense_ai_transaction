@@ -1,25 +1,31 @@
+---
+title: SMS Transaction Extractor
+emoji: 💳
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: "4.36.1"
+python_version: "3.10"
+app_file: app.py
+pinned: false
+---
+
 # SMS Transaction Extractor
 
-This model extracts structured transaction information from SMS.
+This model extracts transaction details from SMS messages.
 
-Fields extracted:
+## Input
 
-- Type
-- Amount
-- Target
-- Alias
-- Account
+Sender  
+Example: AX-ICICIT-S
 
-Example Input:
+Message  
+Example:  
+ICICI Bank Acct XX789 debited for Rs 80.00 on 26-Dec-25; AWFIS credited.
 
-Sender:
-AX-ICICIT-S
+## Output
 
-Message:
-ICICI Bank Acct XX789 debited for Rs 80.00 on 26-Dec-25; AWFIS credited
-
-Example Output:
-
+```json
 {
 "type":"Debit",
 "amount":80,
