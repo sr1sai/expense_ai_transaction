@@ -1,79 +1,85 @@
-import joblib
 import gradio as gr
-import re
+import spacy
+import pickle
+import os
+import zipfile
 
-# ------------------------
-# Load models
-# ------------------------
+# -------------------------------
+# 🔧 Extract models.zip (HF Spaces)
+# -------------------------------
+if os.path.exists("models.zip"):
+    with zipfile.ZipFile("models.zip", 'r') as zip_ref:
+        zip_ref.extractall(".")
 
-type_model = joblib.load("type_model.joblib")
-target_model = joblib.load("target_model.joblib")
-alias_model = joblib.load("alias_model.joblib")
-account_model = joblib.load("account_model.joblib")
+# -------------------------------
+# 📦 Load Models
+# -------------------------------
+nlp = spacy.load("sms_ner_model")
 
+with open("alias_model.pkl", "rb") as f:
+    alias_model = pickle.load(f)
 
-# ------------------------
-# Clean text
-# ------------------------
+with open("vectorizer.pkl", "rb") as f:
+    vectorizer = pickle.load(f)
 
-def clean_text(text):
+# -------------------------------
+# 🧠 Alias Prediction
+# -------------------------------
+def predict_alias(sender, sms):
+    text = sender + " " + sms
+    vec = vectorizer.transform([text])
 
-    text = text.lower()
+    probs = alias_model.predict_proba(vec)
+    confidence = probs.max()
 
-    text = re.sub(r'\d+', ' number ', text)
-    text = re.sub(r'[₹$]', ' currency ', text)
-    text = re.sub(r'[^a-z\s]', ' ', text)
+    if confidence < 0.6:
+        return "Unknown"
 
-    text = re.sub(r'\s+', ' ', text).strip()
+    return alias_model.classes_[probs.argmax()]
 
-    return text
+# -------------------------------
+# 🧾 Main Parser
+# -------------------------------
+def parse_sms(sender, sms):
 
-
-# ------------------------
-# Extract amount
-# ------------------------
-
-def extract_amount(message):
-
-    match = re.search(r'(?:rs\.?|₹)\s?([\d,]+(?:\.\d+)?)', message.lower())
-
-    if match:
-        return float(match.group(1).replace(",", ""))
-
-    return None
-
-
-# ------------------------
-# Prediction
-# ------------------------
-
-def predict(sender, message):
-
-    text = clean_text(sender + " " + message)
+    doc = nlp(sms)
 
     result = {
-        "Type": type_model.predict([text])[0],
-        "Amount": extract_amount(message),
-        "Target": target_model.predict([text])[0],
-        "Alias": alias_model.predict([text])[0],
-        "Account": account_model.predict([text])[0]
+        "Type": None,
+        "Amount": None,
+        "Target": None,
+        "Account": None,
+        "Alias": None
     }
+
+    for ent in doc.ents:
+        if ent.label_ == "TYPE":
+            result["Type"] = ent.text
+        elif ent.label_ == "AMOUNT":
+            result["Amount"] = ent.text
+        elif ent.label_ == "TARGET":
+            result["Target"] = ent.text
+        elif ent.label_ == "ACCOUNT":
+            result["Account"] = ent.text
+
+    result["Alias"] = predict_alias(sender, sms)
 
     return result
 
-
-# ------------------------
-# Gradio interface
-# ------------------------
-
+# -------------------------------
+# 🌐 Gradio UI + API
+# -------------------------------
 demo = gr.Interface(
-    fn=predict,
+    fn=parse_sms,
     inputs=[
         gr.Textbox(label="Sender"),
-        gr.Textbox(label="Message Content", lines=4)
+        gr.Textbox(label="SMS Content")
     ],
-    outputs="json",
-    title="SMS Transaction Extractor"
+    outputs=gr.JSON(label="Parsed Output"),
+    title="📩 Bank SMS Parser (NER + Alias ML)"
 )
 
+# -------------------------------
+# 🚀 Launch
+# -------------------------------
 demo.launch()
