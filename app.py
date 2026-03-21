@@ -3,6 +3,7 @@ import spacy
 import pickle
 import os
 import zipfile
+import re
 
 # -------------------------------
 # 🔧 Extract models.zip (HF Spaces)
@@ -41,6 +42,40 @@ def predict_alias(sender, sms):
 
     return alias_model.classes_[probs.argmax()]
 
+
+def parse_amount(amount_text):
+    """Parse amount text into structured format: {currency, value}"""
+    if not amount_text:
+        return None
+    
+    amount_text = str(amount_text).strip()
+    
+    # Extract numeric value
+    numeric_match = re.search(r'\d+\.?\d*', amount_text)
+    if not numeric_match:
+        return None
+    
+    value = float(numeric_match.group())
+    
+    # Identify currency
+    currency_map = {
+        'rs': 'Rupee',
+        'r': 'Rupee',
+        '₹': 'Rupee',
+        'inr': 'Rupee'
+    }
+    
+    currency = 'Rupee'  # Default
+    for curr_key, curr_name in currency_map.items():
+        if curr_key.lower() in amount_text.lower():
+            currency = curr_name
+            break
+    
+    return {
+        "currency": currency,
+        "value": value
+    }
+
 # -------------------------------
 # 🧾 Main Parser
 # -------------------------------
@@ -62,7 +97,7 @@ def parse_sms(sender, sms):
         if ent.label_ == "TYPE":
             result["Type"] = ent.text
         elif ent.label_ == "AMOUNT":
-            result["Amount"] = ent.text
+            result["Amount"] = parse_amount(ent.text)
         elif ent.label_ == "TARGET":
             result["Target"] = ent.text
         elif ent.label_ == "ACCOUNT":
