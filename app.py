@@ -45,7 +45,6 @@ def predict_alias(sender, sms):
 # 🧾 Main Parser
 # -------------------------------
 def parse_sms(sender, sms):
-
     doc = nlp(sms)
 
     result = {
@@ -56,6 +55,9 @@ def parse_sms(sender, sms):
         "Alias": None
     }
 
+    bank = None
+    account = None
+
     for ent in doc.ents:
         if ent.label_ == "TYPE":
             result["Type"] = ent.text
@@ -64,7 +66,14 @@ def parse_sms(sender, sms):
         elif ent.label_ == "TARGET":
             result["Target"] = ent.text
         elif ent.label_ == "ACCOUNT":
-            result["Account"] = ent.text
+            account = ent.text
+        elif ent.label_ == "BANK":
+            bank = ent.text.upper()
+
+    if bank and account:
+        result["Account"] = f"{bank}:{account}"
+    else:
+        result["Account"] = account
 
     result["Alias"] = predict_alias(sender, sms)
 
