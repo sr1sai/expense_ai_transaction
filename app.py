@@ -19,6 +19,10 @@ nlp = spacy.load("sms_ner_model")
 with open("alias_model.pkl", "rb") as f:
     alias_model = pickle.load(f)
 
+# Compatibility shim for models pickled with newer scikit-learn versions.
+if not hasattr(alias_model, "multi_class"):
+    alias_model.multi_class = "auto"
+
 with open("vectorizer.pkl", "rb") as f:
     vectorizer = pickle.load(f)
 
